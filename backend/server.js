@@ -3,6 +3,7 @@ import dotenv from 'dotenv';
 import cors from 'cors';
 import connectDB from './config/db.js';
 import authRoutes from './routes/authRoutes.js';
+import userRoutes from './routes/userRoutes.js'; // Add this line
 
 // Load env vars
 dotenv.config();
@@ -21,6 +22,7 @@ app.use(cors());
 
 // Mount routers
 app.use('/api/auth', authRoutes);
+app.use('/api/users', userRoutes); // Add this line
 
 // Basic route
 app.get('/', (req, res) => {

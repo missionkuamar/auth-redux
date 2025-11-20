@@ -1,5 +1,5 @@
 import { createContext, useContext, useReducer, useEffect } from 'react';
-import authAPI from '../utils/api';
+import { authAPI, usersAPI } from '../utils/api';
 
 const AuthContext = createContext();
 
@@ -9,6 +9,8 @@ const initialState = {
   loading: true,
   error: null,
   isAuthenticated: false,
+  users: [], // For user list
+  userLoading: false,
 };
 
 const authReducer = (state, action) => {
@@ -51,6 +53,7 @@ const authReducer = (state, action) => {
         isAuthenticated: false,
         loading: false,
         error: null,
+        users: [],
       };
     case 'CLEAR_ERRORS':
       return {
@@ -63,6 +66,37 @@ const authReducer = (state, action) => {
         user: action.payload,
         isAuthenticated: true,
         loading: false,
+      };
+    case 'UPDATE_PROFILE_SUCCESS':
+      localStorage.setItem('user', JSON.stringify({ ...state.user, ...action.payload }));
+      return {
+        ...state,
+        user: { ...state.user, ...action.payload },
+        error: null,
+      };
+    case 'USERS_LOADING':
+      return {
+        ...state,
+        userLoading: true,
+      };
+    case 'USERS_LOADED':
+      return {
+        ...state,
+        users: action.payload,
+        userLoading: false,
+      };
+    case 'USER_DELETED':
+      return {
+        ...state,
+        users: state.users.filter(user => user._id !== action.payload),
+      };
+    case 'USER_UPDATED':
+      return {
+        ...state,
+        users: state.users.map(user =>
+          user._id === action.payload._id ? action.payload : user
+        ),
+        ...(state.user?._id === action.payload._id && { user: action.payload }),
       };
     default:
       return state;
@@ -86,7 +120,7 @@ export const AuthProvider = ({ children }) => {
         return;
       }
 
-      const res = await authAPI.get('/auth/me');
+      const res = await authAPI.getMe();
       dispatch({
         type: 'USER_LOADED',
         payload: res.data.data,
@@ -103,14 +137,11 @@ export const AuthProvider = ({ children }) => {
   const register = async (formData) => {
     try {
       dispatch({ type: 'AUTH_START' });
-
-      const res = await authAPI.post('/auth/register', formData);
-      
+      const res = await authAPI.register(formData);
       dispatch({
         type: 'REGISTER_SUCCESS',
         payload: res.data.data,
       });
-
       return { success: true, data: res.data };
     } catch (error) {
       const message = error.response?.data?.message || 'Registration failed';
@@ -126,14 +157,11 @@ export const AuthProvider = ({ children }) => {
   const login = async (formData) => {
     try {
       dispatch({ type: 'AUTH_START' });
-
-      const res = await authAPI.post('/auth/login', formData);
-      
+      const res = await authAPI.login(formData);
       dispatch({
         type: 'LOGIN_SUCCESS',
         payload: res.data.data,
       });
-
       return { success: true, data: res.data };
     } catch (error) {
       const message = error.response?.data?.message || 'Login failed';
@@ -141,6 +169,75 @@ export const AuthProvider = ({ children }) => {
         type: 'AUTH_FAIL',
         payload: message,
       });
+      return { success: false, error: message };
+    }
+  };
+
+  // Update Profile
+  const updateProfile = async (formData) => {
+    try {
+      const res = await usersAPI.updateProfile(formData);
+      dispatch({
+        type: 'UPDATE_PROFILE_SUCCESS',
+        payload: res.data.data,
+      });
+      return { success: true, data: res.data };
+    } catch (error) {
+      const message = error.response?.data?.message || 'Profile update failed';
+      dispatch({
+        type: 'AUTH_FAIL',
+        payload: message,
+      });
+      return { success: false, error: message };
+    }
+  };
+
+  // Get all users
+  const getUsers = async () => {
+    try {
+      dispatch({ type: 'USERS_LOADING' });
+      const res = await usersAPI.getUsers();
+      dispatch({
+        type: 'USERS_LOADED',
+        payload: res.data.data,
+      });
+      return { success: true, data: res.data };
+    } catch (error) {
+      const message = error.response?.data?.message || 'Failed to load users';
+      dispatch({
+        type: 'AUTH_FAIL',
+        payload: message,
+      });
+      return { success: false, error: message };
+    }
+  };
+
+  // Update user
+  const updateUser = async (id, formData) => {
+    try {
+      const res = await usersAPI.updateUser(id, formData);
+      dispatch({
+        type: 'USER_UPDATED',
+        payload: res.data.data,
+      });
+      return { success: true, data: res.data };
+    } catch (error) {
+      const message = error.response?.data?.message || 'Failed to update user';
+      return { success: false, error: message };
+    }
+  };
+
+  // Delete user
+  const deleteUser = async (id) => {
+    try {
+      await usersAPI.deleteUser(id);
+      dispatch({
+        type: 'USER_DELETED',
+        payload: id,
+      });
+      return { success: true };
+    } catch (error) {
+      const message = error.response?.data?.message || 'Failed to delete user';
       return { success: false, error: message };
     }
   };
@@ -161,11 +258,17 @@ export const AuthProvider = ({ children }) => {
     loading: state.loading,
     error: state.error,
     isAuthenticated: state.isAuthenticated,
+    users: state.users,
+    userLoading: state.userLoading,
     register,
     login,
     logout,
     clearErrors,
     loadUser,
+    updateProfile,
+    getUsers,
+    updateUser,
+    deleteUser,
   };
 
   return (
